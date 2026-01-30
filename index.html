@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LUN - Multi-Sphere Logic</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&family=Inter:wght@300;400;500&display=swap"
+        rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.8.0/math.js"></script>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+    <input type="text" id="hidden-input" autofocus>
+
+    <div id="loader-overlay" class="loader-overlay">
+        <div class="geo-shape"></div>
+        <div id="loader-text" class="loader-text">INITIALIZING</div>
+    </div>
+
+    <div id="user-display" class="user-typing"></div>
+    <div id="vox-display" class="vox-transcription"></div>
+    <div id="vox-prompt" class="vox-prompt">Baixar transcrição? (Digite "sim" ou "não")</div>
+
+    <div id="status" class="status-text">
+        <span class="green-text">Node</span> conectado
+    </div>
+    <div class="beta-warning">O modelo Sory está em testes betas e pode apresentar instabilidades</div>
+    <canvas id="background-aura"></canvas>
+    <canvas id="canvas"></canvas>
+
+    <!-- Modularized Scripts -->
+    <script src="js/config-loader.js"></script>
+    <script src="js/variables.js"></script>
+    <script src="js/memory-system.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/classes.js"></script>
+    <script src="js/system.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/audio.js"></script>
+    <script src="js/cognitive.js"></script>
+    <script src="js/commands.js"></script>
+    <script src="js/swarm.js"></script>
+    <script src="js/proactive.js"></script>
+    <script src="js/authority.js"></script>
+    <script src="js/iot-manager.js"></script>
+    <script src="js/plan-manager.js"></script>
+    <script src="js/app.js"></script>
+</body>
+
+</html>
