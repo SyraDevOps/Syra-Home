@@ -1,0 +1,136 @@
+/* LAYOUT & STRUCTURE */
+
+#background-aura {
+    display: block;
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 0;
+    opacity: 0.6;
+    transition: opacity 0.8s ease;
+}
+
+.user-typing {
+    position: absolute;
+    top: 78%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-family: 'Inter', sans-serif;
+    font-weight: 300;
+    font-size: clamp(1rem, 2vw, 1.4rem);
+    letter-spacing: 0.05em;
+    color: var(--text);
+    opacity: 0.6;
+    z-index: 4;
+    max-width: 80%;
+    text-align: center;
+    pointer-events: none;
+    min-height: 1.5em;
+    transition: opacity 0.5s ease, color 0.8s ease;
+}
+
+.status-text {
+    position: absolute;
+    bottom: 15%;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: 'Libre Baskerville', serif;
+    font-size: clamp(1.2rem, 2.5vw, 2rem);
+    opacity: 0;
+    transition: opacity 1s ease, transform 1s ease, color 0.8s ease;
+    z-index: 3;
+    pointer-events: none;
+    color: var(--text);
+}
+
+.status-text.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(-10px);
+}
+
+.green-text {
+    color: var(--accent);
+    font-weight: 700;
+}
+
+.beta-warning {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: 'Inter', sans-serif;
+    font-size: 0.75rem;
+    color: var(--text);
+    opacity: 0.6;
+    letter-spacing: 1px;
+    z-index: 100;
+    pointer-events: none;
+    text-transform: uppercase;
+    font-weight: 600;
+    transition: color 0.8s ease;
+}
+
+.vox-transcription {
+    position: fixed;
+    top: 50%;
+    left: 40%;
+    transform: translate(-50%, -50%);
+    width: 70%;
+    max-height: 80vh;
+    overflow-y: auto;
+    text-align: center;
+    z-index: 100;
+    pointer-events: auto;
+    color: var(--text);
+    transition: all 0.5s ease;
+    font-family: 'Outfit', sans-serif;
+    font-size: clamp(1.4rem, 3vw, 2.2rem);
+    line-height: 1.5;
+    font-weight: 300;
+    letter-spacing: -0.02em;
+    scrollbar-width: none;
+}
+
+.vox-prompt {
+    position: absolute;
+    bottom: 25%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--surface);
+    color: var(--text);
+    padding: 15px 30px;
+    border-radius: 50px;
+    box-shadow: 0 10px 30px var(--shadow);
+    display: none;
+    z-index: 100;
+    font-family: 'Inter', sans-serif;
+    border: 1px solid var(--border);
+    animation: slideUp 0.5s ease forwards;
+}
+
+/* Scroll Containers */
+#book-scroll-container {
+    scrollbar-width: thin;
+    scrollbar-color: var(--accent) transparent;
+}
+
+#book-scroll-container::-webkit-scrollbar {
+    height: 6px;
+}
+
+#book-scroll-container::-webkit-scrollbar-track {
+    background: rgba(var(--text-rgb), 0.05);
+    border-radius: 10px;
+}
+
+#book-scroll-container::-webkit-scrollbar-thumb {
+    background: var(--accent);
+    border-radius: 10px;
+    transition: background 0.3s;
+}
+
+#book-scroll-container::-webkit-scrollbar-thumb:hover {
+    background: var(--text);
+}
