@@ -197,7 +197,29 @@ async function loadFromMemory(filename) {
 
 // Voice Synthesis
 function speak(text, type = 'concept', onFinished = null) {
-    if (!window.speechSynthesis || isSleeping) return;
+    if (isSleeping) return;
+
+    // Google Cloud TTS Integration
+    if (typeof ConfigManager !== 'undefined' && ConfigManager.getTTSProvider() === 'google') {
+        // Visual Feedback (Active State)
+        if (typeof spheres !== 'undefined' && spheres[0]) spheres[0].state = 'response';
+
+        GoogleTTS.speak(text, () => {
+            if (onFinished) onFinished();
+            if (typeof spheres !== 'undefined' && spheres[0]) spheres[0].state = 'idle';
+        }).catch(err => {
+            console.warn("Google TTS failed, falling back to Native.", err);
+            speakNative(text, type, onFinished);
+        });
+        return;
+    }
+
+    // Default to Native
+    speakNative(text, type, onFinished);
+}
+
+function speakNative(text, type = 'concept', onFinished = null) {
+    if (!window.speechSynthesis) return;
     window.speechSynthesis.cancel();
 
     const hour = new Date().getHours();

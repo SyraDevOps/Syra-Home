@@ -408,7 +408,7 @@ function renderMeshView() {
         item.className = 'mesh-item';
         item.id = `mesh-node-${f.id}`;
 
-        // State modifiers for simple color tweaks if needed, 
+        // State modifiers for simple color tweaks if needed,
         // but keeping it white/blue as requested primarily.
         // We can add classes for state
         if (f.state === 'processing') item.classList.add('state-processing');
@@ -517,7 +517,7 @@ function showFragmentDetails(id) {
         </div>
 
         <div class="mesh-input-area">
-            <input id="debate-input" type="text" placeholder="Adicionar argumento ou pergunta..." 
+            <input id="debate-input" type="text" placeholder="Adicionar argumento ou pergunta..."
                 onkeydown="event.stopPropagation(); if(event.key === 'Enter') window.userSubmitDebate('${id}')"
                 class="mesh-input">
             <button onclick="window.userSubmitDebate('${id}')" class="mesh-send-btn">ENVIAR</button>
@@ -786,7 +786,13 @@ async function callGemini(prompt) {
         userDisplay.textContent = "Offline Mode.";
         return;
     }
-    const API_KEY = getAPIKey();
+    const API_KEY = typeof ConfigManager !== 'undefined' ? ConfigManager.getGeminiKey() : '';
+    if (!API_KEY) {
+        speak("Chave de API não configurada. Por favor, abra as configurações.");
+        if (typeof openSettings === 'function') openSettings();
+        return;
+    }
+
     const conf = getModelConfig();
     const MODEL = conf.model || 'gemini-1.5-flash';
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`;
@@ -833,26 +839,26 @@ async function callGemini(prompt) {
 
     // VISUAL FEEDBACK (Se solicitado explicitamente)
     if (relevantMemories.length > 0 && isMemoryIntent) {
-        const listHtml = relevantMemories.map(m => `
+        const listHtml = relevantMemories.map(m => \`
             <div style="border-bottom:1px solid rgba(var(--text-rgb), 0.1); padding:10px 0; font-size:0.95rem; font-weight:300; display:flex; justify-content:space-between; align-items:center;">
-               <span>${m.text}</span>
-               <span style="font-size:0.65em; opacity:0.4; font-family:'Outfit'; text-transform:uppercase;">${new Date(m.date || Date.now()).toLocaleDateString()}</span>
-            </div>`).join('');
+               <span>\${m.text}</span>
+               <span style="font-size:0.65em; opacity:0.4; font-family:'Outfit'; text-transform:uppercase;">\${new Date(m.date || Date.now()).toLocaleDateString()}</span>
+            </div>\`).join('');
 
-        voxDisplay.innerHTML = `
+        voxDisplay.innerHTML = \`
             <div class="glass-card" style="text-align:left; max-width:600px; margin:0 auto; animation: fadeUp 0.8s ease; padding:30px;">
                 <div style="font-size:0.7rem; letter-spacing:3px; color:var(--accent); margin-bottom:20px; font-weight:700;">MEMÓRIA_SEMÂNTICA // MATCH</div>
                 <div style="display:flex; flex-direction:column; gap:5px;">
-                    ${listHtml}
+                    \${listHtml}
                 </div>
             </div>
-        `;
-        speak(`Encontrei ${relevantMemories.length} registros relacionados.`);
+        \`;
+        speak(\`Encontrei \${relevantMemories.length} registros relacionados.\`);
     }
 
     // Construct Context String
     const memoryContext = relevantMemories.length > 0
-        ? `\nMEMÓRIA_RELEVANTE: "${relevantMemories.map(m => m.text).join(' | ')}"`
+        ? \`\\nMEMÓRIA_RELEVANTE: "\${relevantMemories.map(m => m.text).join(' | ')}"\`
         : "";
 
     if (relevantMemories.length > 0) {
@@ -860,10 +866,10 @@ async function callGemini(prompt) {
         ripples.push({ x: width / 2, y: height / 2, radius: 20, alpha: 0.8 });
     }
 
-    const strictSystemPrompt = `
+    const strictSystemPrompt = \`
 SYS:SORY(Syra).Dev:SyraDevOps.
-OBJ:Hub Cognitivo IoT. 
-CONTEXTO:Browser Interface. 
+OBJ:Hub Cognitivo IoT.
+CONTEXTO:Browser Interface.
 
 TOOLS(JSON ONLY):
 -[wiki]{q}:Fatos/História
@@ -886,8 +892,16 @@ REGRAS:
 3.IMPORTANTE: Ao usar ferramenta, NÃO USE CAMPO "t" (texto). Deixe vazio. A ferramenta falará o status.
 4.Se usar JSON, NUNCA escreva fora dele.
 
-MEM:${memoryContext}
-    `;
+MEM:\${memoryContext}
+    \`;
+
+    // --- CONVERSATION HISTORY ---
+    // Inject History Logic
+    if (typeof ConversationManager !== 'undefined') {
+        ConversationManager.add('user', JSON.stringify({ user_input: prompt, state: systemState }));
+    }
+
+    const history = (typeof ConversationManager !== 'undefined') ? ConversationManager.getHistory() : [{ parts: [{ text: JSON.stringify({ user_input: prompt, state: systemState }) }] }];
 
     try {
         const controller = new AbortController();
@@ -898,11 +912,9 @@ MEM:${memoryContext}
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                contents: [{
-                    parts: [{ text: JSON.stringify({ user_input: prompt, state: systemState }) }]
-                }],
+                contents: history,
                 generationConfig: {
-                    maxOutputTokens: 400, // Increased for stability
+                    maxOutputTokens: 800, // Increased for stability
                     temperature: 0.7 // More natural
                 },
                 systemInstruction: {
@@ -911,18 +923,23 @@ MEM:${memoryContext}
             })
         });
 
-        if (!response.ok) throw new Error(`API Error: ${response.status} `);
+        if (!response.ok) throw new Error(\`API Error: \${response.status} \`);
         const data = await response.json();
 
         let rawText = data.candidates[0].content.parts[0].text.trim();
         // Handle potential markdown code block wrapping
         if (rawText.startsWith('```json')) rawText = rawText.replace(/```json|```/g, '').trim();
 
+        // Add to history
+        if (typeof ConversationManager !== 'undefined') {
+            ConversationManager.add('model', rawText);
+        }
+
         // Parse Intelligence (Smart Regex Mode)
         let ai = { t: "", a: "none", p: null };
 
         // Attempt to find JSON structure anywhere in the text
-        const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+        const jsonMatch = rawText.match(/\{[\\s\\S]*\}/);
 
         if (jsonMatch) {
             try {
@@ -947,7 +964,7 @@ MEM:${memoryContext}
         // TOOL SYSTEM: Execute self-generated local logic
         if (ai.a === 'generate_tool') {
             await storeLocalTool(ai.p.name, ai.p.code);
-            speak(`Nova ferramenta "${ai.p.name}" foi codificada e integrada ao núcleo.`);
+            speak(\`Nova ferramenta "\${ai.p.name}" foi codificada e integrada ao núcleo.\`);
             return;
         }
 
@@ -961,9 +978,9 @@ MEM:${memoryContext}
 
             const toolResult = await executeLocalTool(ai.p.name, ai.p.args);
             // Optionally feed result back or just display
-            voxDisplay.innerHTML = `<div style="padding:20px; border:1px solid var(--accent);">
-                <span style="font-size:0.5rem; color:var(--accent);">TOOL_EXECUTED // ${ai.p.name}</span><br>${toolResult}
-            </div>`;
+            voxDisplay.innerHTML = \`<div style="padding:20px; border:1px solid var(--accent);">
+                <span style="font-size:0.5rem; color:var(--accent);">TOOL_EXECUTED // \${ai.p.name}</span><br>\${toolResult}
+            </div>\`;
             return;
         }
 
@@ -973,7 +990,7 @@ MEM:${memoryContext}
             isSynchronized = true;
 
             // Auto-Index Conversation
-            neuralSemantics.store(`${prompt} -> ${ai.t}`);
+            neuralSemantics.store(\`\${prompt} -> \${ai.t}\`);
 
             // Log conversation to persistent history
             if (typeof window.logInteraction === 'function') {
@@ -981,9 +998,9 @@ MEM:${memoryContext}
             }
 
             // Visual Update with Feedback UI
-            voxDisplay.innerHTML = `
+            voxDisplay.innerHTML = \`
                 <div style="font-family: 'Outfit', sans-serif; text-align: center; max-width: 90%; margin: 0 auto; animation: fadeUp 0.8s ease forwards;">
-                    <p style="font-size: clamp(1.1rem, 2.5vw, 2rem); line-height: 1.4; color: var(--text); font-weight: 300;">${ai.t}</p>
+                    <p style="font-size: clamp(1.1rem, 2.5vw, 2rem); line-height: 1.4; color: var(--text); font-weight: 300;">\${ai.t}</p>
                     <div style="display: flex; align-items: center; justify-content: center; gap: 20px; margin-top: 30px; opacity: 0; animation: fadeUp 1s ease 0.5s forwards;">
                         <div id="neural-feedback" onclick="submitFeedback(this)" style="display:flex; align-items:center; gap:10px; cursor: pointer; opacity: 0.6; transition: opacity 0.3s; padding: 10px;">
                             <div class="feedback-box" style="width:18px; height:18px; border:1px solid var(--accent); display:flex; align-items:center; justify-content:center; transition: all 0.3s;">
@@ -1002,7 +1019,7 @@ MEM:${memoryContext}
                             <span style="font-size: 0.6rem; letter-spacing: 2px;">COPIAR</span>
                         </div>
                     </div>
-                </div>`;
+                </div>\`;
 
             // Audio
             speak(ai.t);
@@ -1063,8 +1080,8 @@ MEM:${memoryContext}
                 const target = (ai.p && typeof ai.p === 'object') ? ai.p.target : "all";
                 const msg = (ai.p && typeof ai.p === 'object') ? ai.p.message : "PING";
                 // Mock send - in real scenario would fetch to bridge
-                try { await fetch(`${nodeHost}/send?target=${target}&msg=${encodeURIComponent(msg)}`); } catch (e) { }
-                speak(`Comando enviado para ${target}.`);
+                try { await fetch(\`\${nodeHost}/send?target=\${target}&msg=\${encodeURIComponent(msg)}\`); } catch (e) { }
+                speak(\`Comando enviado para \${target}.\`);
                 return;
             }
             if (ai.a === 'weather') {
@@ -1072,8 +1089,8 @@ MEM:${memoryContext}
                 const info = await getWeather(city);
                 // In economy mode, just show info. In deep mode, analyze.
                 if (cognitiveMode === 'economy') {
-                    speak(`Clima em ${city}: ${info}`);
-                    voxDisplay.innerHTML = `<div style="font-size:1.5rem">${info}</div>`;
+                    speak(\`Clima em \${city}: \${info}\`);
+                    voxDisplay.innerHTML = \`<div style="font-size:1.5rem">\${info}</div>\`;
                 } else {
                     const analysis = await getGeminiInsight(info); // Extra cost only if needed
                     speak(analysis);
@@ -1140,10 +1157,10 @@ MEM:${memoryContext}
 
         userDisplay.textContent = "FALHA COGNITIVA // " + errorMsg.substring(0, 20);
 
-        voxDisplay.innerHTML = `<div style="color:var(--accent); text-align:center; margin-top:20px; animation:fadeUp 0.5s ease;">
+        voxDisplay.innerHTML = \`<div style="color:var(--accent); text-align:center; margin-top:20px; animation:fadeUp 0.5s ease;">
             <p style="font-size:0.8rem; font-weight:700; margin-bottom:5px;">ERRO DE CONEXÃO</p>
-            <p style="font-size:0.6rem; opacity:0.6;">${errorMsg}</p>
-        </div>`;
+            <p style="font-size:0.6rem; opacity:0.6;">\${errorMsg}</p>
+        </div>\`;
 
         speak("Erro na conexão com o núcleo. Reiniciando subsistemas.");
         setTimeout(() => {
@@ -1181,8 +1198,8 @@ function startPlanMode(goal) {
     document.getElementById('hidden-input').style.color = "#111111";
     document.getElementById('hidden-input').style.zIndex = "1001";
 
-    voxDisplay.innerHTML = `<div style="color:var(--accent); font-size:0.5rem; letter-spacing:5px; font-weight:700; animation: fadeUp 1s ease;">PLANNING_PHASE // ${planGoal.toUpperCase()}</div>
-                            <p style="font-size:1.5rem; font-weight:300; margin-top:20px; color: var(--text); animation: fadeUp 1.2s ease;">Qual o primeiro passo?</p>`;
+    voxDisplay.innerHTML = \`<div style="color:var(--accent); font-size:0.5rem; letter-spacing:5px; font-weight:700; animation: fadeUp 1s ease;">PLANNING_PHASE // \${planGoal.toUpperCase()}</div>
+                            <p style="font-size:1.5rem; font-weight:300; margin-top:20px; color: var(--text); animation: fadeUp 1.2s ease;">Qual o primeiro passo?</p>\`;
     speak("Modo de planejamento iniciado. Estou pronta.");
     hapticFeedback(100);
 }
@@ -1228,33 +1245,35 @@ async function addPlanStep(text) {
         selected: true // Auto select new node to continue flow
     };
 
-    // Deselect parents to focus on new branch? 
+    // Deselect parents to focus on new branch?
     // Yes, typical flow: click -> create -> new is selected.
     planNodes.forEach(n => n.selected = false);
     newNode.selected = true;
 
     planNodes.push(newNode);
 
-    voxDisplay.innerHTML = `<p style="font-size:1.2rem; font-weight:300; color: var(--text);">${synth}</p>`;
-    speak(`Nó derivado criado.`);
+    voxDisplay.innerHTML = \`<p style="font-size:1.2rem; font-weight:300; color: var(--text);">\${synth}</p>\`;
+    speak(\`Nó derivado criado.\`);
     hapticFeedback(50);
     spheres[0].state = 'idle';
 }
 
 async function synthesizeStep(text) {
     try {
-        const API_KEY = 'AIzaSyB_aACpgPi9lLpfbaPGE2H7aBan9IvqgtM';
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${API_KEY}`;
+        const API_KEY = typeof ConfigManager !== 'undefined' ? ConfigManager.getGeminiKey() : '';
+        if (!API_KEY) throw new Error("No Key");
+
+        const url = \`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=\${API_KEY}\`;
         const res = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                contents: [{ parts: [{ text: `Sintetize esta ideia de um plano em no máximo 3 palavras maiúsculas: "${text}"` }] }]
+                contents: [{ parts: [{ text: \`Sintetize esta ideia de um plano em no máximo 3 palavras maiúsculas: "\${text}"\` }] }]
             })
         });
         const data = await res.json();
-        return data.candidates[0].content.parts[0].text.trim().toUpperCase().replace(/[^A-Z\s]/g, '');
-    } catch {
+        return data.candidates[0].content.parts[0].text.trim().toUpperCase().replace(/[^A-Z\\s]/g, '');
+    } catch (e) {
         return text.split(' ').slice(0, 3).join(' ').toUpperCase();
     }
 }
@@ -1264,8 +1283,8 @@ function endPlanMode() {
 
     // Prepare for potential download if there is a plan
     if (planNodes && planNodes.length > 0) {
-        window.pendingPlanDownload = `PLANO ESTRATÉGICO: ${planGoal}\n-----------------------------------\n` +
-            planNodes.map((n, i) => `[${i}] ${n.short}: ${n.raw}`).join('\n');
+        window.pendingPlanDownload = \`PLANO ESTRATÉGICO: \${planGoal}\\n-----------------------------------\\n\` +
+            planNodes.map((n, i) => \`[\${i}] \${n.short}: \${n.raw}\`).join('\\n');
 
         isPromptingDownload = true;
 
@@ -1305,11 +1324,11 @@ async function handleQuery(query) {
         spheres[0].state = 'response';
         isSynchronized = true;
         let essence = data.extract.split('. ').slice(0, 2).join('. ') + '.';
-        voxDisplay.innerHTML = `
+        voxDisplay.innerHTML = \`
             <div style="font-family: 'Outfit', sans-serif; text-align: center; max-width: 80%; margin: 0 auto; animation: fadeUp 1s ease forwards;">
-                <span style="color: var(--accent); font-weight: 600; font-size: 0.7em; letter-spacing: 3px; opacity: 0.6;">${data.title.toUpperCase()}</span><br>
-                <p style="font-size: clamp(1.1rem, 2.5vw, 1.8rem); margin: 15px 0; line-height: 1.4; color: var(--text); opacity: 0.9; font-weight: 300;">${essence}</p>
-            </div>`;
+                <span style="color: var(--accent); font-weight: 600; font-size: 0.7em; letter-spacing: 3px; opacity: 0.6;">\${data.title.toUpperCase()}</span><br>
+                <p style="font-size: clamp(1.1rem, 2.5vw, 1.8rem); margin: 15px 0; line-height: 1.4; color: var(--text); opacity: 0.9; font-weight: 300;">\${essence}</p>
+            </div>\`;
 
         speak(essence, 'concept');
         // REMOVED: Auto-clear timeout - content persists until Enter
@@ -1324,13 +1343,13 @@ async function handleTrace() {
     try {
         const res = await fetch('https://ipapi.co/json/');
         const data = await res.json();
-        voxDisplay.innerHTML = `IP: ${data.ip} | ${data.city} | ${data.org}`;
+        voxDisplay.innerHTML = \`IP: \${data.ip} | \${data.city} | \${data.org}\`;
     } catch (e) { userDisplay.textContent = "Falhou."; }
 }
 
 function showHelp() {
     const commands = ["/radio", "/ler", "/q", "/iss", "/trace", "/enc", "/time", "/cor", "/senha", "/matrix", "/clr"];
-    userDisplay.innerHTML = `<div style="font-size: 0.6em; color: rgba(0,0,0,0.5)">${commands.join(" | ")}</div>`;
+    userDisplay.innerHTML = \`<div style="font-size: 0.6em; color: rgba(0,0,0,0.5)">\${commands.join(" | ")}</div>\`;
 }
 
 // [REMOVED] Legacy Vox/Audio functions - moved to js/audio.js
@@ -1410,18 +1429,18 @@ async function syncIoTNodes() {
     // Try each node until one responds
     for (const node of nodes) {
         try {
-            const url = `http://${node.host}:${node.port}/dispositivos`;
+            const url = \`http://\${node.host}:\${node.port}/dispositivos\`;
             const data = await fetchAPI(url);
 
             if (data && data.items) {
                 data.items.slice(0, 4).forEach((name, idx) => {
                     if (spheres[idx + 1]) spheres[idx + 1].deviceName = name;
                 });
-                console.log(`[IoT] Synced devices from ${node.name}`);
+                console.log(\`[IoT] Synced devices from \${node.name}\`);
                 return; // Success, exit
             }
         } catch (e) {
-            console.log(`[IoT] Failed to sync from ${node.name}: ${e.message}`);
+            console.log(\`[IoT] Failed to sync from \${node.name}: \${e.message}\`);
         }
     }
 }
@@ -1437,15 +1456,15 @@ async function syraBridgeLoop() {
     }
 
     try {
-        const url = `http://${primaryNode.host}:${primaryNode.port}/bridge?device=SynInterface`;
+        const url = \`http://\${primaryNode.host}:\${primaryNode.port}/bridge?device=SynInterface\`;
         const data = await fetchAPI(url);
 
         if (data && data.messages && data.messages.length > 0) {
             const last = data.messages[data.messages.length - 1];
-            speak(`Mensagem de ${last.from}: ${last.data}`);
+            speak(\`Mensagem de \${last.from}: \${last.data}\`);
         }
     } catch (e) {
-        console.log(`[IoT] Bridge error from ${primaryNode.name}: ${e.message}`);
+        console.log(\`[IoT] Bridge error from \${primaryNode.name}: \${e.message}\`);
     }
 
     // Poll every 5 seconds
@@ -1465,7 +1484,7 @@ function connectToPeer(id) {
 
 function setupPeerConn() {
     peerConn.on('open', () => { peerConn.send("Link ativo."); });
-    peerConn.on('data', data => { speak(`Dados: ${data}`); });
+    peerConn.on('data', data => { speak(\`Dados: \${data}\`); });
 }
 
 // --- SISTEMA DE FERRAMENTAS AUTÔNOMAS ---
@@ -1473,7 +1492,7 @@ async function storeLocalTool(name, code) {
     if (!neuralSemantics.db) await neuralSemantics.initDB();
     const tx = neuralSemantics.db.transaction("autonomous_tools", "readwrite");
     tx.objectStore("autonomous_tools").put({ name, code, ts: Date.now() });
-    speak(`Núcleo de ferramentas atualizado: ${name}.`);
+    speak(\`Núcleo de ferramentas atualizado: \${name}.\`);
 }
 
 async function executeLocalTool(name, args) {
@@ -1487,7 +1506,7 @@ async function executeLocalTool(name, args) {
                 try {
                     const func = new Function('args', request.result.code);
                     resolve(func(args));
-                } catch (e) { resolve(`Tool Error: ${e.message}`); }
+                } catch (e) { resolve(\`Tool Error: \${e.message}\`); }
             } else resolve("Tool unknown.");
         };
     });
