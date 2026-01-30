@@ -134,3 +134,29 @@
 #book-scroll-container::-webkit-scrollbar-thumb:hover {
     background: var(--text);
 }
+
+/* RESPONSIVENESS */
+@media (max-width: 768px) {
+    .vox-transcription {
+        width: 90%;
+        left: 50%;
+        font-size: 1.2rem;
+    }
+    .vox-prompt {
+        width: 80%;
+    }
+    .glass-card {
+        padding: 15px;
+    }
+    .weather-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+    }
+    .mesh-container {
+        display: none !important; /* Hide floating dots on mobile */
+    }
+    .mesh-modal {
+        width: 95%;
+        max-height: 80vh;
+    }
+}

@@ -69,3 +69,22 @@ body.master-mode::before {
     background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0, 212, 255, 0.03) 2px, rgba(0, 212, 255, 0.03) 4px);
     pointer-events: none; z-index: 1;
 }
+
+/* STRICT BLACK & WHITE OVERRIDES FOR ELEGANCE */
+.mesh-item {
+    background: #ffffff;
+    box-shadow: 0 0 5px rgba(255,255,255,0.5); /* Reduced glow */
+    border: 1px solid rgba(255,255,255,0.2);
+}
+
+.glass-card {
+    border: 1px solid rgba(255,255,255,0.1);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5); /* Deeper shadow, less color */
+}
+
+/* Light Mode refined */
+body.light-mode .glass-card {
+    background: rgba(255,255,255,0.8);
+    border: 1px solid rgba(0,0,0,0.05);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+}

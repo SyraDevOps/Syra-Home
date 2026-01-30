@@ -1,11 +1,11 @@
-// API SERVICES - External Fetchers (Wiki, Books, Images, Weather, Market, Reddit, Anime)
+// API SERVICES - External Fetchers (Refined Error Handling)
 
 async function searchWiki(query) {
     try {
         const url = `https://pt.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(query)}`;
         const res = await fetch(url);
-        if (res.status === 404) return { extract: "Conceito não indexado na base Wiki principal.", title: query, type: "not_found" };
-        if (!res.ok) return null;
+        if (res.status === 404) return { extract: "Conceito não localizado nos arquivos.", title: query, type: "not_found" };
+        if (!res.ok) throw new Error("Wiki Unreachable");
         const data = await res.json();
         return {
             extract: data.extract,
@@ -13,12 +13,15 @@ async function searchWiki(query) {
             type: data.type,
             title: data.title
         };
-    } catch (e) { return null; }
+    } catch (e) {
+        console.warn("[API] Wiki Error:", e);
+        return null;
+    }
 }
 
 async function searchBooks(query) {
     spheres[0].state = 'processing';
-    userDisplay.textContent = "BUSCANDO OBRAS...";
+    userDisplay.textContent = "CONSULTANDO BIBLIOTECA...";
 
     async function fallbackOpenLibrary(q) {
         try {
@@ -87,11 +90,7 @@ async function searchBooks(query) {
                 </div>
             `;
 
-            speak(`Encontrei ${books.filter(b => b.cover).length} obras sobre ${query}.`);
-
-            if (typeof window.logInteraction === 'function') {
-                window.logInteraction('book_search', query, books.filter(b => b.cover).length);
-            }
+            speak(`Localizei ${books.filter(b => b.cover).length} obras.`);
         } else {
             throw new Error("No books found anywhere.");
         }
@@ -99,22 +98,22 @@ async function searchBooks(query) {
     } catch (err) {
         console.error(err);
         spheres[0].state = 'error';
-        userDisplay.textContent = "Busca literária falhou.";
-        voxDisplay.innerHTML = `<div style="color:var(--accent); font-size:1.2rem; margin-top:20px; opacity:0.7;">Nenhum registro encontrado.</div>`;
-        speak("Não encontrei registros literários disponíveis.");
+        userDisplay.textContent = "SEM DADOS.";
+        speak("Registros literários indisponíveis no momento.");
         setTimeout(() => spheres[0].state = 'idle', 3000);
     }
 }
 
-async function searchImages(query, source = 'all') {
+async function searchImages(query) {
     spheres[0].state = 'processing';
-    userDisplay.textContent = "BUSCANDO IMAGENS...";
+    userDisplay.textContent = "VARREDURA VISUAL...";
 
     try {
         let images = [];
         const encodedQ = encodeURIComponent(query);
         const fetchPromises = [];
 
+        // Wiki Commons
         fetchPromises.push(
             fetch(`https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodedQ}&gsrlimit=10&gsrnamespace=6&prop=imageinfo&iiprop=url|extmetadata&iiurlwidth=800&format=json&origin=*`)
                 .then(res => res.json())
@@ -133,6 +132,7 @@ async function searchImages(query, source = 'all') {
                 }).catch(() => [])
         );
 
+        // NASA API
         fetchPromises.push(
             fetch(`https://images-api.nasa.gov/search?q=${encodedQ}&media_type=image`)
                 .then(res => res.json())
@@ -152,6 +152,7 @@ async function searchImages(query, source = 'all') {
         const results = await Promise.all(fetchPromises);
         images = results.flat();
 
+        // Fallback: Pollinations AI Generation
         if (images.length === 0) {
             const seed = Math.floor(Math.random() * 1000);
             images.push({
@@ -172,14 +173,8 @@ async function searchImages(query, source = 'all') {
                 active: true,
                 filter: 'ALL'
             };
-            speak(`Encontrei ${images.length} imagens de múltiplas fontes.`);
+            speak(`Visualização compilada. ${images.length} ativos.`);
             if (typeof showGallery === 'function') showGallery();
-
-            if (typeof window.logInteraction === 'function') {
-                window.logInteraction('image_search', query, images.length, {
-                    sources: [...new Set(images.map(i => i.source))]
-                });
-            }
         } else {
             throw new Error("No images found");
         }
@@ -187,69 +182,23 @@ async function searchImages(query, source = 'all') {
     } catch (e) {
         console.error(e);
         spheres[0].state = 'error';
-        userDisplay.textContent = "Erro na busca visual.";
-        speak("Nenhuma imagem encontrada.");
-        setTimeout(() => spheres[0].state = 'idle', 3000);
-    }
-}
-
-async function searchAnime(query) {
-    spheres[0].state = 'processing';
-    userDisplay.textContent = "BUSCANDO ANIME...";
-    try {
-        const res = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(query)}&limit=1`);
-        const data = await res.json();
-
-        if (data.data && data.data.length > 0) {
-            const anime = data.data[0];
-            const title = anime.title;
-            const synopsis = anime.synopsis ? anime.synopsis.substring(0, 180) + "..." : "Sem sinopse.";
-            const score = anime.score || "N/A";
-            const img = anime.images.jpg.large_image_url;
-            const url = anime.url;
-
-            voxDisplay.innerHTML = `
-                <div class="glass-card" style="display:flex; flex-direction: column; align-items: center; gap:20px; max-width:450px; margin:0 auto; margin-bottom: 90px; animation:fadeUp 0.8s ease; text-align: center; padding: 30px;">
-                    <img src="${img}" style="height:280px; border-radius:8px; box-shadow:0 15px 50px rgba(0,0,0,0.6); transform: translateY(-10px);">
-
-                    <div style="width:100%;">
-                        <h2 style="margin:0; font-size:1.5rem; color:var(--accent); letter-spacing:2px; font-weight:700; text-transform:uppercase;">${title}</h2>
-                        <div style="font-size:0.75rem; opacity:0.5; margin:8px 0 20px 0; letter-spacing:1px;">SCORE: ${score} // ${anime.year || 'N/A'}</div>
-
-                        <p style="font-size:0.9rem; line-height:1.6; opacity:0.8; margin-bottom:25px; font-weight:300; font-family:'Inter';">${synopsis}</p>
-
-                        <a href="${url}" target="_blank" style="display:inline-block; font-size:0.7rem; color:var(--text); text-decoration:none; border:1px solid rgba(var(--text-rgb), 0.3); padding:8px 24px; border-radius:50px; transition: all 0.3s; letter-spacing:1px;">MYANIMELIST</a>
-                    </div>
-                </div>
-            `;
-
-            speak(`Encontrei ${title}. Nota ${score}.`);
-            spheres[0].state = 'response';
-            isSynchronized = true;
-
-            if (typeof window.logInteraction === 'function') {
-                window.logInteraction('anime_search', query, 1, { title, episodes: anime.episodes, rating: score });
-            }
-        } else {
-            throw new Error("Anime not found");
-        }
-    } catch (e) {
-        console.error(e);
-        speak("Anime não encontrado.");
-        voxDisplay.innerHTML = `<div class="glass-card" style="text-align:center; color:var(--accent);">Anime não encontrado na rede.</div>`;
-        spheres[0].state = 'error';
+        userDisplay.textContent = "FALHA VISUAL.";
+        speak("Não foi possível gerar ou recuperar imagens.");
         setTimeout(() => spheres[0].state = 'idle', 3000);
     }
 }
 
 async function getWeather(city) {
     spheres[0].state = 'processing';
-    userDisplay.textContent = "BUSCANDO CLIMA...";
+    userDisplay.textContent = "CONECTANDO SATÉLITE...";
     try {
         const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=pt`);
         const geoData = await geoRes.json();
 
-        if (!geoData.results || geoData.results.length === 0) return `Cidade não encontrada: ${city}.`;
+        if (!geoData.results || geoData.results.length === 0) {
+            speak(`Localização não identificada: ${city}.`);
+            return null;
+        }
 
         const { latitude, longitude, name, country } = geoData.results[0];
 
@@ -258,7 +207,6 @@ async function getWeather(city) {
 
         const current = wData.current_weather;
         const hourlyIndex = new Date().getHours();
-
         const humidity = wData.hourly.relativehumidity_2m[hourlyIndex] || '?';
         const feelsLike = wData.hourly.apparent_temperature[hourlyIndex] || current.temperature;
         const precip = wData.hourly.precipitation_probability[hourlyIndex] || 0;
@@ -307,184 +255,13 @@ async function getWeather(city) {
 
         spheres[0].state = 'response';
         isSynchronized = true;
-
-        if (typeof window.logInteraction === 'function') {
-            window.logInteraction('weather_check', city, 1, { temp: current.temperature, condition });
-        }
-
-        return `${Math.round(current.temperature)} graus em ${name}. ${condition}. Sensação de ${Math.round(feelsLike)}.`;
+        return `${Math.round(current.temperature)} graus em ${name}. ${condition}.`;
 
     } catch (e) {
         console.error(e);
         spheres[0].state = 'error';
+        speak("Dados atmosféricos indisponíveis.");
         setTimeout(() => spheres[0].state = 'idle', 3000);
-    }
-}
-
-async function getMarketData() {
-    spheres[0].state = 'processing';
-    userDisplay.textContent = "ANALISANDO MERCADO...";
-
-    try {
-        const res = await fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=brl&ids=bitcoin,ethereum,solana,ripple,cardano&order=market_cap_desc&per_page=5&page=1&sparkline=false&price_change_percentage=24h');
-        const data = await res.json();
-
-        if (!data || data.length === 0) throw new Error("No data");
-
-        let itemsHtml = data.map(coin => {
-            const price = coin.current_price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-            const change = coin.price_change_percentage_24h;
-            const isPos = change >= 0;
-
-            const arrowIcon = isPos
-                ? `<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L2 22h20L12 2z"/></svg>`
-                : `<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style="transform: rotate(180deg);"><path d="M12 2L2 22h20L12 2z"/></svg>`;
-
-            const colorVar = isPos ? 'var(--finance-up, #00ff88)' : 'var(--finance-down, #ff4444)';
-            const bgHover = isPos ? 'rgba(0,255,136,0.05)' : 'rgba(255,68,68,0.05)';
-
-            return `
-                <div class="market-item" style="display:flex; justify-content:space-between; align-items:center; padding:15px; border-bottom:1px solid rgba(var(--text-rgb), 0.1); transition: background 0.3s;" onmouseover="this.style.background='${bgHover}'" onmouseout="this.style.background='transparent'">
-                    <div style="display:flex; align-items:center; gap:12px;">
-                        <img src="${coin.image}" style="width:24px; height:24px; border-radius:50%;">
-                        <div style="text-align:left;">
-                            <div style="font-size:0.9rem; font-weight:600; color:var(--text); letter-spacing:1px;">${coin.symbol.toUpperCase()}</div>
-                            <div style="font-size:0.65rem; opacity:0.5; font-family:'Outfit'; text-transform:uppercase;">${coin.name}</div>
-                        </div>
-                    </div>
-                    <div style="text-align:right;">
-                        <div style="font-size:0.9rem; font-weight:300; font-family:'Inter'; color:var(--text);">${price}</div>
-                        <div style="font-size:0.75rem; color:${colorVar}; display:flex; align-items:center; justify-content:flex-end; gap:4px; font-weight:600;">
-                            ${arrowIcon} ${Math.abs(change).toFixed(2)}%
-                        </div>
-                    </div>
-                </div>
-            `;
-        }).join('');
-
-        voxDisplay.innerHTML = `
-            <div class="glass-card" style="max-width:400px; margin:0 auto; animation: fadeUp 0.8s ease; padding:0; overflow:hidden;">
-                <div style="padding:20px; border-bottom:1px solid rgba(var(--text-rgb), 0.1); display:flex; justify-content:space-between; align-items:center;">
-                     <span style="font-size:0.75rem; letter-spacing:3px; color:var(--accent); font-weight:700;">MARKET_PULSE // LIVE</span>
-                     <span style="font-size:0.6rem; opacity:0.5;">BRL</span>
-                </div>
-                <div style="display:flex; flex-direction:column;">
-                    ${itemsHtml}
-                </div>
-                <div style="padding:10px; text-align:center; font-size:0.6rem; opacity:0.3; letter-spacing:2px;">
-                    POWERED BY COINGECKO
-                </div>
-            </div>
-        `;
-
-        speak("Cotações atualizadas.");
-        spheres[0].state = 'response';
-        isSynchronized = true;
-
-        if (typeof window.logInteraction === 'function') {
-            window.logInteraction('market_check', 'crypto_top5', data.length);
-        }
-
-    } catch (e) {
-        console.error(e);
-        speak("Não foi possível acessar o mercado.");
-    }
-}
-
-async function searchReddit(query) {
-    spheres[0].state = 'processing';
-    userDisplay.textContent = "BUSCANDO TRENDS...";
-
-    try {
-        let subreddit = 'popular';
-        let searchQuery = '';
-
-        const parts = query.toLowerCase().trim().split(' ');
-        if (parts[0] === 'trends' && parts.length > 1) {
-            subreddit = parts.slice(1).join('');
-        } else if (parts.length > 0) {
-            subreddit = parts[0] === 'trends' ? 'popular' : parts[0];
-            searchQuery = parts[0] === 'trends' ? parts.slice(1).join(' ') : parts.slice(1).join(' ');
-        }
-
-        const url = searchQuery
-            ? `https://www.reddit.com/r/${subreddit}/search.json?q=${encodeURIComponent(searchQuery)}&sort=top&t=day&limit=10`
-            : `https://www.reddit.com/r/${subreddit}/hot.json?limit=10`;
-
-        const res = await fetch(url, { headers: { 'User-Agent': 'Sory/2.5' } });
-        const data = await res.json();
-
-        if (!data.data || !data.data.children || data.data.children.length === 0) {
-            throw new Error('No posts found');
-        }
-
-        const posts = data.data.children
-            .filter(p => !p.data.stickied)
-            .slice(0, 10)
-            .map(p => ({
-                title: p.data.title,
-                subreddit: p.data.subreddit_name_prefixed,
-                votes: p.data.ups,
-                comments: p.data.num_comments,
-                url: `https://reddit.com${p.data.permalink}`,
-                created: new Date(p.data.created_utc * 1000)
-            }));
-
-        const postsHtml = posts.map((p) => {
-            const timeAgo = Math.floor((Date.now() - p.created) / 60000);
-            const timeStr = timeAgo < 60 ? `${timeAgo}m` : `${Math.floor(timeAgo / 60)}h`;
-
-            return `
-                <div class="reddit-post glass-card" style="display:flex; gap:12px; padding:15px; align-items:flex-start; transition: all 0.3s; cursor:pointer; background: transparent; border: none; box-shadow: none; border-bottom: 1px solid rgba(var(--text-rgb), 0.1);"
-                     onclick="window.open('${p.url}', '_blank')"
-                     onmouseover="this.style.transform='translateX(5px)'; this.style.background='rgba(var(--text-rgb), 0.05)';"
-                     onmouseout="this.style.transform='translateX(0)'; this.style.background='transparent';">
-
-                    <div style="display:flex; flex-direction:column; align-items:center; min-width:45px;">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="var(--accent)" style="opacity:0.8;"><path d="M12 2L2 12h6v10h8V12h6L12 2z"/></svg>
-                        <span style="font-size:0.85rem; font-weight:700; color:var(--accent);">${p.votes >= 1000 ? (p.votes / 1000).toFixed(1) + 'k' : p.votes}</span>
-                    </div>
-
-                    <div style="flex:1; overflow:hidden; text-align: left;">
-                        <div style="font-size:0.85rem; font-weight:500; color:var(--text); line-height:1.3; margin-bottom:6px;">${p.title}</div>
-                        <div style="display:flex; gap:10px; font-size:0.65rem; opacity:0.5;">
-                            <span>${p.subreddit}</span>
-                            <span>${p.comments} comments</span>
-                            <span>${timeStr} ago</span>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }).join('');
-
-        voxDisplay.innerHTML = `
-            <div class="glass-card" style="max-width:500px; margin:0 auto; padding:0; overflow:hidden; animation: fadeUp 0.8s ease;">
-                <div style="padding:20px; border-bottom:1px solid rgba(var(--text-rgb), 0.1); display:flex; justify-content:space-between; align-items:center;">
-                    <span style="font-size:0.75rem; letter-spacing:3px; color:var(--accent); font-weight:700;">REDDIT // ${subreddit.toUpperCase()}</span>
-                    <span style="font-size:0.6rem; opacity:0.5;">TOP 10</span>
-                </div>
-                <div style="display:flex; flex-direction:column; max-height:400px; overflow-y:auto;">
-                    ${postsHtml}
-                </div>
-                <div style="padding:10px; text-align:center; font-size:0.55rem; opacity:0.3; letter-spacing:2px;">
-                    POWERED BY REDDIT API
-                </div>
-            </div>
-        `;
-
-        speak(`Top posts de ${subreddit}.`);
-        spheres[0].state = 'response';
-        isSynchronized = true;
-
-        if (typeof window.logInteraction === 'function') {
-            window.logInteraction('reddit_search', query, posts.length, { subreddit });
-        }
-
-    } catch (e) {
-        console.error(e);
-        speak("Não encontrei posts.");
-        voxDisplay.innerHTML = `<div class="glass-card" style="text-align:center; padding:30px; color:var(--accent);">Erro ao acessar Reddit.</div>`;
-        spheres[0].state = 'error';
-        setTimeout(() => spheres[0].state = 'idle', 3000);
+        return null;
     }
 }
